@@ -431,43 +431,44 @@ CloudFormation do
       {
         "AttributeName" => "timeStamp",
         "AttributeType" => "S"
-      },
-      {
-        "AttributeName" => "ssmCommandId",
-        "AttributeType" => "S"
-      },
-      {
-        "AttributeName" => "targetUrl",
-        "AttributeType" => "S"
-      },
-      {
-        "AttributeName" => "totalRequests",
-        "AttributeType" => "N"
-      },
-      {
-        "AttributeName" => "concurrency",
-        "AttributeType" => "N"
-      },
-      {
-        "AttributeName" => "completeRequests",
-        "AttributeType" => "N"
-      },
-      {
-        "AttributeName" => "failedRequests",
-        "AttributeType" => "N"
-      },
-      {
-        "AttributeName" => "totalTransferredBytes",
-        "AttributeType" => "N"
-      },
-      {
-        "AttributeName" => "timePerRequest",
-        "AttributeType" => "N"
-      },
-      {
-        "AttributeName" => "timePerRequestConcurrent",
-        "AttributeType" => "N"
       }
+#      ,
+#      {
+#        "AttributeName" => "ssmCommandId",
+#        "AttributeType" => "S"
+#      },
+#      {
+#        "AttributeName" => "targetUrl",
+#        "AttributeType" => "S"
+#      },
+#      {
+#        "AttributeName" => "totalRequests",
+#        "AttributeType" => "N"
+#      },
+#      {
+#        "AttributeName" => "concurrency",
+#        "AttributeType" => "N"
+#      },
+#      {
+#        "AttributeName" => "completeRequests",
+#        "AttributeType" => "N"
+#      },
+#      {
+#        "AttributeName" => "failedRequests",
+#        "AttributeType" => "N"
+#      },
+#      {
+#        "AttributeName" => "totalTransferredBytes",
+#        "AttributeType" => "N"
+#      },
+#      {
+#        "AttributeName" => "timePerRequest",
+#        "AttributeType" => "N"
+#      },
+#      {
+#        "AttributeName" => "timePerRequestConcurrent",
+#        "AttributeType" => "N"
+#      }
     ])
     Property("KeySchema", [
       {
