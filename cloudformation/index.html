@@ -1,0 +1,325 @@
+<html>
+<head>
+	<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
+	<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap-theme.min.css" integrity="sha384-rHyoN1iRsVXV4nD0JutlnGaslCJuC7uwjduW9SVrLvRYooPp2bWYgmgJQIXwl/Sp" crossorigin="anonymous">
+  <script src="https://code.jquery.com/jquery-3.1.0.min.js"></script>
+	<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa" crossorigin="anonymous"></script>
+	<script src="https://sdk.amazonaws.com/js/aws-sdk-2.5.1.min.js"></script>
+  <style>
+    .glyphicon-refresh-animate {
+        -animation: spin .9s infinite linear;
+        -ms-animation: spin .9s infinite linear;
+        -webkit-animation: spinw .9s infinite linear;
+        -moz-animation: spinm .9s infinite linear;
+    }
+    @keyframes spin {
+        from { transform: scale(1) rotate(0deg);}
+        to { transform: scale(1) rotate(360deg);}
+    } 
+    @-webkit-keyframes spinw {
+        from { -webkit-transform: rotate(0deg);}
+        to { -webkit-transform: rotate(360deg);}
+    }
+    @-moz-keyframes spinm {
+        from { -moz-transform: rotate(0deg);}
+        to { -moz-transform: rotate(360deg);}
+    }
+  </style>
+  <title>Bees With Frickin Laser Beams!</title>
+</head>
+<nav class="navbar navbar-inverse navbar-fixed-top">
+  <div class="container">
+    <div class="navbar-header">
+      <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#navbar" aria-expanded="false" aria-controls="navbar">
+        <span class="sr-only">Toggle navigation</span>
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+      </button>
+      <a class="navbar-brand" href="#">BWFL!</a>
+    </div>
+    <div id="navbar" class="collapse navbar-collapse">
+      <ul class="nav navbar-nav">
+        <li class="active"><a href="#">Home</a></li>
+      </ul>
+    </div>
+  </div>
+</nav>
+<div class="container theme-showcase" role="main">
+  <div class="jumbotron">
+    <h1>Bees With Frickin Laser Beams!</h1>
+    <p>Break stuff. Fast!</p>
+  </div>
+</div>
+<div class="container">
+  <div class="starter-template">
+     <div class="row">
+        <div class="col-sm-6">
+          <div class="panel panel-default">
+            <div class="panel-heading">
+              <h3 class="panel-title">Swarm Control</h3>
+            </div>
+            <div class="panel-body">
+              <button id="btnswarmup" type="button" class="btn btn-lg btn-warning">Swarm Up</button>
+              <button id="btnswarmdown" type="button" class="btn btn-lg btn-info">Swarm Down</button>
+              <button id="btnswarmattack" type="button" class="btn btn-lg btn-danger">Swarm Attack!</button>
+            </div>
+          </div>
+          <div class="panel panel-default">
+            <div class="panel-heading">
+              <h3 class="panel-title">Drones</h3>
+            </div>
+            <div class="panel-body">
+              </div>
+              <table style="display:none" class="table table-striped table-condensed small">
+                <thead>
+                  <tr>
+                    <th>Instance ID</th>
+                    <th>Availability Zone</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody id="ASGInstances">
+                </tbody>
+              </table>
+              <div class="form-group" id="ASGInstancesSpinner">
+                <div class="col-md-12 text-center">
+                  <span class="glyphicon glyphicon-refresh glyphicon-refresh-animate"></span>
+                </div>
+              </div>
+          </div>
+        </div>
+        <div class="col-sm-6">
+          <div class="panel panel-default">
+            <div class="panel-heading">
+              <h3 class="panel-title">Recent Activity</h3>
+            </div>
+            <div class="panel-body">
+              <table style="display:none" class="table table-striped table-condensed small">
+                <thead>
+                  <tr>
+                    <th>Time</th>
+                    <th>Description</th>
+                  </tr>
+                </thead>
+                <tbody id="ASGStatus">
+                </tbody>
+              </table>
+              <div class="form-group" id="ASGStatusSpinner">
+                <div class="col-md-12 text-center">
+                  <span class="glyphicon glyphicon-refresh glyphicon-refresh-animate"></span>
+                </div>
+              </div>    
+            </div>
+          </div>
+        </div>
+      </div>
+  </div>
+</div>
+<div id="dlgswarmup" class="modal fade bs-example-modal-sm" tabindex="-1" role="dialog" aria-labelledby="mySmallModalLabel" aria-hidden="true">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+        <h4 class="modal-title">Adjust swarm size</h4>
+      </div>
+      <div class="modal-body">
+        <p><input type="number" id="swarmsize"></p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+        <button id="btnupdateswarm" type="button" class="btn btn-primary">Save Changes</button>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="dlgattack" class="modal fade bs-example-modal-sm" tabindex="-1" role="dialog" aria-labelledby="mySmallModalLabel" aria-hidden="true">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+        <h4 class="modal-title">Break your stuff!</h4>
+      </div>
+      <div class="modal-body">
+        <table>
+          <tr>
+            <th scope="row">Enter URL</th>
+            <td><input type="string" id="destinationURL"></td>
+          </tr>
+          <tr>
+            <th scope="row">Test Name</th>
+            <td><input type="string" id="testName"></td>
+          </tr>
+          <tr>
+            <th scope="row">Concurrent Requests</th>
+            <td><input type="number" id="concurrentRequests"></td>
+          </tr>
+          <tr>
+            <th scope="row">Total Requests</th>
+            <td><input type="number" id="totalRequests"></td>
+          </tr>
+        </table>
+      </div>
+      <div id="alert-modal-body" class="modal-body"></div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+        <button id="btnattack" type="button" class="btn btn-primary">Attack!</button>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+
+AWS.config.update({accessKeyId: '%{accesskey}', secretAccessKey: '%{secretkey}'});
+//AWS.config.update({accessKeyId: 'AKIAJ4OMTYLT2BTDHLUQ', secretAccessKey: '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'});
+
+var asgname='%{asg}';
+//var asgname='BWFL-4-AutoScalingGroup-1MTFWNMUG1W46';
+var autoscaling = new AWS.AutoScaling({region:'ap-southeast-2'});
+
+
+function updateASGStatus(){
+  var params = {
+    AutoScalingGroupName: asgname,
+    MaxRecords: 20
+  }
+  autoscaling.describeScalingActivities(params, function(err, data) {
+    if (err)  { 
+      console.log(err);
+    } else {
+      console.log(data.Activities);
+
+      $("#ASGStatusSpinner").hide();
+      var d = new Date();
+      $("#ASGStatus").parent().show();
+      $("#ASGStatus").empty();
+      $.each(data.Activities, function(index, obj){
+        row = $("<tr>");
+        d.setTime(Date.parse((typeof obj.EndTime != 'undefined')?obj.EndTime:obj.StartTime));
+        row.append("<td>"+d.getDate()+"/"+d.getMonth()+"/"+d.getFullYear()+" "+("0"+d.getHours()).slice(-2) +":"+ ("0"+d.getMinutes()).slice(-2)+":"+("0"+d.getSeconds()).slice(-2)+"</td>");
+        row.append("<td>"+obj.Description+"</td>");
+      $("#ASGStatus").append(row);
+      })
+
+    }
+  });
+  window.setTimeout(function(){ console.log("Updating ASG activity"); $("#ASGStatusSpinner").show(); updateASGStatus(); }, 3000);
+};
+window.setTimeout(function(){ console.log("Updating ASG activity"); $("#ASGStatusSpinner").show(); updateASGStatus(); }, 1);
+
+$('#btnswarmup').click(function(){
+  $('#dlgswarmup').modal('show');
+});
+
+$('#btnupdateswarm').click(function(){
+  swarmUp($('#swarmsize').val(), function(){$('#dlgswarmup').modal('hide');});
+});
+
+$('#btnswarmdown').click(function(){
+  swarmDown();
+});
+
+$('#btnswarmdown').click(function(){
+  swarmDown();
+});
+
+$('#btnswarmattack').click(function(){
+  $('#dlgattack').modal('show');
+});
+
+$('#btnattack').click(function(){
+  swarmAttack( 
+    $('#destinationURL').val(), 
+    $('#testName').val(), 
+    $('#totalRequests').val(), 
+    $('#concurrentRequests').val(), 
+    function(){$('#dlgattack').modal('hide');},
+    function(err_msg){$('#alert-modal-body').html(err_msg);}
+  );
+});
+
+function updateInstanceStatus(){
+  var params = {
+    AutoScalingGroupNames: [asgname]
+  }
+  autoscaling.describeAutoScalingGroups(params, function(err, data) {
+    if (err)  { 
+      console.log(err);
+    } else {
+      console.log(data);
+      $("#ASGInstancesSpinner").hide();
+      var d = new Date();
+      $("#ASGInstances").parent().show();
+      $("#ASGInstances").empty();
+      $.each(data.AutoScalingGroups[0].Instances, function(index, obj){
+        row = $("<tr>");
+        d.setTime(Date.parse(obj.EndTime));
+        row.append("<td>"+obj.InstanceId+"</td>");
+        row.append("<td>"+obj.AvailabilityZone+"</td>");
+        row.append("<td>"+obj.LifecycleState+"</td>");
+        $("#ASGInstances").append(row);
+      })
+
+
+    }
+  });
+  window.setTimeout(function(){ console.log("Updating Instance List"); $("#ASGInstancesSpinner").show();updateInstanceStatus(); }, 3000);
+};
+window.setTimeout(function(){  console.log("Updating Instance List"); $("#ASGInstancesSpinner").show();updateInstanceStatus(); }, 1);
+
+var max_total=100000;
+var max_concurrent=100000;
+function swarmAttack(url, testname, total, concurrent, cb, err_cb){
+  var r = new RegExp("^http(s?)\:\/\/[0-9a-zA-Z]([-.\w]*[0-9a-zA-Z])*(:(0-9)*)*(\/?)([a-zA-Z0-9\-\.\?\,\'\/\\\+&amp;%\$#_]*)?$"); 
+  if(!r.test(url)){ err_cb("Invalid URL"); return;}
+  if(!testname){ err_cb("Invalid test name"); return;}
+  if(!(total >= 1 && total<= max_total)){ err_cb("Total requests must be between 1 and "+max_total); return;}
+  if(!(concurrent >= 1 && concurrent<= 100000)){ err_cb("Concurrent requests must be between 1 and "+max_concurrent); return;}
+//  if(total < concurrent){ err_cb("Total requests must be greater that concurrent requests"); return;}
+
+  var payload = {url:url,testname:testname,total:total,concurrent:concurrent};
+  var lambda = new AWS.Lambda({region:'ap-southeast-2'});
+  var params = {
+    FunctionName: '%{swarmattack}',
+    LogType: 'None',
+    Payload: JSON.stringify(payload)
+  };
+  console.log(params);
+  lambda.invoke(params, function(err, data) {
+    if (err) { console.log(err, err.stack); return; } 
+    cb();
+    console.log(data);
+  });
+}
+
+function swarmDown(){
+  var lambda = new AWS.Lambda({region:'ap-southeast-2'});
+  var params = {
+    FunctionName: '%{swarmdown}',
+    LogType: 'None' 
+  };
+  console.log(params);
+  lambda.invoke(params, function(err, data) {
+    if (err) { console.log(err, err.stack); return; } 
+    console.log(data);
+  });
+}
+
+function swarmUp(size, callback){
+  if (!(size >= 1 && size<= 20)) { alert('Error! must be a number between 1 and 20'); return; }
+  console.log(size);
+  var lambda = new AWS.Lambda({region:'ap-southeast-2'});
+  var params = {
+    FunctionName: '%{swarmup}',
+    LogType: 'None' ,
+    Payload: size
+  };
+  console.log(params);
+  lambda.invoke(params, function(err, data) {
+    if (err) { console.log(err, err.stack); return; } 
+    console.log(data);
+    callback(data);
+  });
+}
+</script>
+</html>

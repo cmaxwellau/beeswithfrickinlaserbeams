@@ -1,0 +1,25 @@
+{
+  "builders": [
+    {
+      "type": "amazon-ebs",
+      "region": "ap-southeast-2",
+      "ssh_username": "ec2-user",
+      "instance_type": "t2.micro",
+      "source_ami": "ami-dc361ebf",
+      "ami_name": "Bee-{{isotime \"2006-01-02:1504\" | clean_ami_name}}",
+      "ami_description": "Drone for BeesWithFrickinLaserBeams-{{isotime \"2006-01-02:1504\"}}"
+    }
+  ],
+  "provisioners": [
+    {
+      "type": "shell",
+      "inline": [
+        "sudo -E pip install awscli",
+        "sudo -E yum -y install https://amazon-ssm-$(ec2-metadata -z | cut -f2 -d\\ | head -c -2).s3.amazonaws.com/latest/linux_amd64/amazon-ssm-agent.rpm",
+        "sudo -E yum install -y wget curl telnet httpd-tools",
+        "sudo -E yum update -y"
+
+      ]
+    }
+  ]
+}

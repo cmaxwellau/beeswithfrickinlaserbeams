@@ -1,0 +1,24 @@
+#!/usr/bin/ruby
+#
+# CFNDSL DSL Rake build written by AWS Professional Services for x
+
+require 'cfndsl/rake_task'
+
+$purpose = "BWFL"
+$stringtime  = Time.new.inspect
+$lambda_dir = '../lambda-functions'
+$policy_dir = "../iam-policies"
+$ssmdoc_dir = "../ssm-documents"
+
+CfnDsl::RakeTask.new('default') do |t|
+  t.cfndsl_opts = {
+    verbose: true,
+    pretty: true,
+    files: [
+      {
+        filename: "bwfl.rb",
+        output:   "bwfl.json"
+      },
+    ]
+  }
+end

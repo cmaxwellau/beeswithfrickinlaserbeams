@@ -1,0 +1,1000 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Bees with Frickin Laserbeams",
+  "Parameters": {
+    "StatusS3BucketName": {
+      "Type": "String",
+      "Description": "Bucket name for status page",
+      "Default": "camm-beeswithfrickinlaserbeams"
+    },
+    "InstanceVPC": {
+      "Type": "AWS::EC2::VPC::Id",
+      "Description": "Target VPC ID for drones"
+    },
+    "InstanceType": {
+      "Type": "String",
+      "Description": "Instance Type for drones",
+      "Default": "t2.micro"
+    },
+    "Revision": {
+      "Type": "String",
+      "Description": "Used to force cloudformation to reevaluate changes",
+      "Default": "5"
+    },
+    "InstanceSubnets": {
+      "Type": "List<AWS::EC2::Subnet::Id>",
+      "Description": "Comma separated set of subnets for drones",
+      "Default": "subnet-gggggggg,subnet-hhhhhhhh,subnet-iiiiiiii",
+      "ConstraintDescription": "Must be a list of valid existing Subnet IDs expressed as as 'subnet-gggggggg,subnet-hhhhhhhh'"
+    },
+    "InstanceAMI": {
+      "Type": "AWS::EC2::Image::Id",
+      "Description": "AMI for drones",
+      "Default": "ami-992d1afa"
+    }
+  },
+  "Resources": {
+    "InstanceSecurityGroup": {
+      "Properties": {
+        "GroupDescription": "The security group for drones",
+        "VpcId": {
+          "Ref": "InstanceVPC"
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "BWFL"
+          }
+        ]
+      },
+      "Type": "AWS::EC2::SecurityGroup"
+    },
+    "InstanceAccessSSHCIDR": {
+      "Properties": {
+        "IpProtocol": "tcp",
+        "FromPort": "22",
+        "ToPort": "22",
+        "CidrIp": "0.0.0.0/0",
+        "GroupId": {
+          "Fn::GetAtt": [
+            "InstanceSecurityGroup",
+            "GroupId"
+          ]
+        }
+      },
+      "Type": "AWS::EC2::SecurityGroupIngress"
+    },
+    "InstanceProfile": {
+      "Properties": {
+        "Roles": [
+          {
+            "Ref": "InstanceRole"
+          }
+        ],
+        "Path": "/Drone/"
+      },
+      "Type": "AWS::IAM::InstanceProfile"
+    },
+    "InstanceRole": {
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": [
+                "sts:AssumeRole"
+              ],
+              "Effect": "Allow",
+              "Principal": {
+                "Service": [
+                  "ec2.amazonaws.com"
+                ]
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "Path": "/",
+        "ManagedPolicyArns": [
+          "arn:aws:iam::aws:policy/service-role/AmazonEC2RoleforSSM",
+          "arn:aws:iam::aws:policy/AmazonSNSFullAccess"
+        ],
+        "Policies": [
+          {
+            "PolicyName": "DronePolicy_S3",
+            "PolicyDocument": {
+              "Statement": [
+                {
+                  "Action": "s3:ListAllMyBuckets",
+                  "Effect": "Allow",
+                  "Resource": "*"
+                },
+                {
+                  "Action": [
+                    "s3:*"
+                  ],
+                  "Effect": "Allow",
+                  "Resource": [
+                    {
+                      "Fn::Join": [
+                        "",
+                        [
+                          "arn:aws:s3:::",
+                          {
+                            "Ref": "StatusS3BucketName"
+                          },
+                          "/*"
+                        ]
+                      ]
+                    },
+                    {
+                      "Fn::Join": [
+                        "",
+                        [
+                          "arn:aws:s3:::",
+                          {
+                            "Ref": "StatusS3BucketName"
+                          }
+                        ]
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "Type": "AWS::IAM::Role"
+    },
+    "WebSDKUser": {
+      "Properties": {
+        "Policies": [
+          {
+            "PolicyName": "WebSDKUser",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:List*",
+                    "s3:get*"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::Join": [
+                        "",
+                        [
+                          "arn:aws:s3:::",
+                          {
+                            "Ref": "StatusS3BucketName"
+                          }
+                        ]
+                      ]
+                    },
+                    {
+                      "Fn::Join": [
+                        "",
+                        [
+                          "arn:aws:s3:::",
+                          {
+                            "Ref": "StatusS3BucketName"
+                          },
+                          "/*"
+                        ]
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "autoscaling:Describe*"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "lambda:Invoke*"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::GetAtt": [
+                        "BeesUp",
+                        "Arn"
+                      ]
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "BeesDown",
+                        "Arn"
+                      ]
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "BeesLaunch",
+                        "Arn"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "Type": "AWS::IAM::User"
+    },
+    "WebSDKAccessKey": {
+      "Properties": {
+        "UserName": {
+          "Ref": "WebSDKUser"
+        }
+      },
+      "Type": "AWS::IAM::AccessKey"
+    },
+    "CreateS3File": {
+      "DependsOn": [
+        "LambdaExecutionRole"
+      ],
+      "Properties": {
+        "Description": "Function to create a *small* file in an S3 bucket",
+        "Handler": "index.handler",
+        "Runtime": "nodejs4.3",
+        "Timeout": "30",
+        "Role": {
+          "Fn::GetAtt": [
+            "LambdaExecutionRole",
+            "Arn"
+          ]
+        },
+        "Code": {
+          "ZipFile": {
+            "Fn::Join": [
+              "",
+              [
+                "var aws = require('aws-sdk');\nvar response = require('cfn-response');\n\nexports.handler = function(event, context) {\n  aws.config.region = event.ResourceProperties.Region;\n  console.log(JSON.stringify(event));\n  if ((event.RequestType == 'Create') || (event.RequestType == 'Update')) {\n    var S3 = new aws.S3();\n    var params = {\n      Bucket: event.ResourceProperties.Bucket,\n      Key: event.ResourceProperties.Key,\n      Body: event.ResourceProperties.Body,\n      ACL:  event.ResourceProperties.ACL,\n      ContentType: event.ResourceProperties.ContentType,\n      GrantRead: event.ResourceProperties.GrantRead\n    };\n\n    S3.upload(params, function(e, data) {\n      if (e) {\n        response.send(event, context, response.FAILED, e);\n        console.log(e);\n        return;\n      }\n    });\n  }\n  response.send(event, context, response.SUCCESS);\n  return;\n};"
+              ]
+            ]
+          }
+        }
+      },
+      "Type": "AWS::Lambda::Function"
+    },
+    "CreateS3FileFromHTTPS": {
+      "DependsOn": [
+        "LambdaExecutionRole"
+      ],
+      "Properties": {
+        "Description": "Function to create a file in an S3 bucket from an HTTPS URL",
+        "Handler": "index.handler",
+        "Runtime": "nodejs4.3",
+        "Timeout": "30",
+        "Role": {
+          "Fn::GetAtt": [
+            "LambdaExecutionRole",
+            "Arn"
+          ]
+        },
+        "Code": {
+          "ZipFile": {
+            "Fn::Join": [
+              "",
+              [
+                "var aws = require('aws-sdk');\nvar response = require('cfn-response');\nvar https = require('https');\n\nexports.handler = function(event, context) {\n  aws.config.region = event.ResourceProperties.Region;\n  console.log(JSON.stringify(event));\n  if ((event.RequestType == 'Create') || (event.RequestType == 'Update')) {\n    var S3 = new aws.S3();\n\n\n    var params = {\n      Bucket: event.ResourceProperties.Bucket,\n      Key: event.ResourceProperties.Key,\n      Body: \"body\",\n      ACL:  event.ResourceProperties.ACL,\n      ContentType: event.ResourceProperties.ContentType,\n      GrantRead: event.ResourceProperties.GrantRead\n    };\n\n    S3.upload(params, function(e, data) {\n      if (e) {\n        response.send(event, context, response.FAILED, e);\n        console.log(e);\n        return;\n      }\n    });\n  }\n  response.send(event, context, response.SUCCESS);\n  return;\n};"
+              ]
+            ]
+          }
+        }
+      },
+      "Type": "AWS::Lambda::Function"
+    },
+    "InitialStatusPage": {
+      "DependsOn": "WebSDKAccessKey",
+      "Type": "Custom::InitialStatusPage",
+      "Properties": {
+        "ServiceToken": {
+          "Fn::GetAtt": [
+            "CreateS3File",
+            "Arn"
+          ]
+        },
+        "StackName": {
+          "Ref": "AWS::StackName"
+        },
+        "Region": {
+          "Ref": "AWS::Region"
+        },
+        "Bucket": {
+          "Ref": "StatusS3Bucket"
+        },
+        "ContentType": "text/html",
+        "Body": {
+          "Fn::Join": [
+            "",
+            [
+              "<html>\n<head>\n\t<link rel=\"stylesheet\" href=\"https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css\" integrity=\"sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u\" crossorigin=\"anonymous\">\n\t<link rel=\"stylesheet\" href=\"https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap-theme.min.css\" integrity=\"sha384-rHyoN1iRsVXV4nD0JutlnGaslCJuC7uwjduW9SVrLvRYooPp2bWYgmgJQIXwl/Sp\" crossorigin=\"anonymous\">\n  <script src=\"https://code.jquery.com/jquery-3.1.0.min.js\"></script>\n\t<script src=\"https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js\" integrity=\"sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa\" crossorigin=\"anonymous\"></script>\n\t<script src=\"https://sdk.amazonaws.com/js/aws-sdk-2.5.1.min.js\"></script>\n  <style>\n    .glyphicon-refresh-animate {\n        -animation: spin .9s infinite linear;\n        -ms-animation: spin .9s infinite linear;\n        -webkit-animation: spinw .9s infinite linear;\n        -moz-animation: spinm .9s infinite linear;\n    }\n    @keyframes spin {\n        from { transform: scale(1) rotate(0deg);}\n        to { transform: scale(1) rotate(360deg);}\n    } \n    @-webkit-keyframes spinw {\n        from { -webkit-transform: rotate(0deg);}\n        to { -webkit-transform: rotate(360deg);}\n    }\n    @-moz-keyframes spinm {\n        from { -moz-transform: rotate(0deg);}\n        to { -moz-transform: rotate(360deg);}\n    }\n  </style>\n  <title>Bees With Frickin Laser Beams!</title>\n</head>\n<nav class=\"navbar navbar-inverse navbar-fixed-top\">\n  <div class=\"container\">\n    <div class=\"navbar-header\">\n      <button type=\"button\" class=\"navbar-toggle collapsed\" data-toggle=\"collapse\" data-target=\"#navbar\" aria-expanded=\"false\" aria-controls=\"navbar\">\n        <span class=\"sr-only\">Toggle navigation</span>\n        <span class=\"icon-bar\"></span>\n        <span class=\"icon-bar\"></span>\n        <span class=\"icon-bar\"></span>\n      </button>\n      <a class=\"navbar-brand\" href=\"#\">BWFL!</a>\n    </div>\n    <div id=\"navbar\" class=\"collapse navbar-collapse\">\n      <ul class=\"nav navbar-nav\">\n        <li class=\"active\"><a href=\"#\">Home</a></li>\n      </ul>\n    </div>\n  </div>\n</nav>\n<div class=\"container theme-showcase\" role=\"main\">\n  <div class=\"jumbotron\">\n    <h1>Bees With Frickin Laser Beams!</h1>\n    <p>Break stuff. Fast!</p>\n  </div>\n</div>\n<div class=\"container\">\n  <div class=\"starter-template\">\n     <div class=\"row\">\n        <div class=\"col-sm-6\">\n          <div class=\"panel panel-default\">\n            <div class=\"panel-heading\">\n              <h3 class=\"panel-title\">Swarm Control</h3>\n            </div>\n            <div class=\"panel-body\">\n              <button id=\"btnswarmup\" type=\"button\" class=\"btn btn-lg btn-warning\">Swarm Up</button>\n              <button id=\"btnswarmdown\" type=\"button\" class=\"btn btn-lg btn-info\">Swarm Down</button>\n              <button id=\"btnswarmattack\" type=\"button\" class=\"btn btn-lg btn-danger\">Swarm Attack!</button>\n            </div>\n          </div>\n          <div class=\"panel panel-default\">\n            <div class=\"panel-heading\">\n              <h3 class=\"panel-title\">Drones</h3>\n            </div>\n            <div class=\"panel-body\">\n              </div>\n              <table style=\"display:none\" class=\"table table-striped table-condensed small\">\n                <thead>\n                  <tr>\n                    <th>Instance ID</th>\n                    <th>Availability Zone</th>\n                    <th>Status</th>\n                  </tr>\n                </thead>\n                <tbody id=\"ASGInstances\">\n                </tbody>\n              </table>\n              <div class=\"form-group\" id=\"ASGInstancesSpinner\">\n                <div class=\"col-md-12 text-center\">\n                  <span class=\"glyphicon glyphicon-refresh glyphicon-refresh-animate\"></span>\n                </div>\n              </div>\n          </div>\n        </div>\n        <div class=\"col-sm-6\">\n          <div class=\"panel panel-default\">\n            <div class=\"panel-heading\">\n              <h3 class=\"panel-title\">Recent Activity</h3>\n            </div>\n            <div class=\"panel-body\">\n              <table style=\"display:none\" class=\"table table-striped table-condensed small\">\n                <thead>\n                  <tr>\n                    <th>Time</th>\n                    <th>Description</th>\n                  </tr>\n                </thead>\n                <tbody id=\"ASGStatus\">\n                </tbody>\n              </table>\n              <div class=\"form-group\" id=\"ASGStatusSpinner\">\n                <div class=\"col-md-12 text-center\">\n                  <span class=\"glyphicon glyphicon-refresh glyphicon-refresh-animate\"></span>\n                </div>\n              </div>    \n            </div>\n          </div>\n        </div>\n      </div>\n  </div>\n</div>\n<div id=\"dlgswarmup\" class=\"modal fade bs-example-modal-sm\" tabindex=\"-1\" role=\"dialog\" aria-labelledby=\"mySmallModalLabel\" aria-hidden=\"true\">\n  <div class=\"modal-dialog\" role=\"document\">\n    <div class=\"modal-content\">\n      <div class=\"modal-header\">\n        <button type=\"button\" class=\"close\" data-dismiss=\"modal\" aria-label=\"Close\"><span aria-hidden=\"true\">&times;</span></button>\n        <h4 class=\"modal-title\">Adjust swarm size</h4>\n      </div>\n      <div class=\"modal-body\">\n        <p><input type=\"number\" id=\"swarmsize\"></p>\n      </div>\n      <div class=\"modal-footer\">\n        <button type=\"button\" class=\"btn btn-default\" data-dismiss=\"modal\">Close</button>\n        <button id=\"btnupdateswarm\" type=\"button\" class=\"btn btn-primary\">Save Changes</button>\n      </div>\n    </div>\n  </div>\n</div>\n<div id=\"dlgattack\" class=\"modal fade bs-example-modal-sm\" tabindex=\"-1\" role=\"dialog\" aria-labelledby=\"mySmallModalLabel\" aria-hidden=\"true\">\n  <div class=\"modal-dialog\" role=\"document\">\n    <div class=\"modal-content\">\n      <div class=\"modal-header\">\n        <button type=\"button\" class=\"close\" data-dismiss=\"modal\" aria-label=\"Close\"><span aria-hidden=\"true\">&times;</span></button>\n        <h4 class=\"modal-title\">Break your stuff!</h4>\n      </div>\n      <div class=\"modal-body\">\n        <table>\n          <tr>\n            <th scope=\"row\">Enter URL</th>\n            <td><input type=\"string\" id=\"destinationURL\"></td>\n          </tr>\n          <tr>\n            <th scope=\"row\">Test Name</th>\n            <td><input type=\"string\" id=\"testName\"></td>\n          </tr>\n          <tr>\n            <th scope=\"row\">Concurrent Requests</th>\n            <td><input type=\"number\" id=\"concurrentRequests\"></td>\n          </tr>\n          <tr>\n            <th scope=\"row\">Total Requests</th>\n            <td><input type=\"number\" id=\"totalRequests\"></td>\n          </tr>\n        </table>\n      </div>\n      <div id=\"alert-modal-body\" class=\"modal-body\"></div>\n      <div class=\"modal-footer\">\n        <button type=\"button\" class=\"btn btn-default\" data-dismiss=\"modal\">Close</button>\n        <button id=\"btnattack\" type=\"button\" class=\"btn btn-primary\">Attack!</button>\n      </div>\n    </div>\n  </div>\n</div>\n<script>\n\nAWS.config.update({accessKeyId: '",
+              {
+                "Ref": "WebSDKAccessKey"
+              },
+              "', secretAccessKey: '",
+              {
+                "Fn::GetAtt": [
+                  "WebSDKAccessKey",
+                  "SecretAccessKey"
+                ]
+              },
+              "'});\n//AWS.config.update({accessKeyId: 'AKIAJ4OMTYLT2BTDHLUQ', secretAccessKey: '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'});\n\nvar asgname='",
+              {
+                "Ref": "AutoScalingGroup"
+              },
+              "';\n//var asgname='BWFL-4-AutoScalingGroup-1MTFWNMUG1W46';\nvar autoscaling = new AWS.AutoScaling({region:'ap-southeast-2'});\n\n\nfunction updateASGStatus(){\n  var params = {\n    AutoScalingGroupName: asgname,\n    MaxRecords: 20\n  }\n  autoscaling.describeScalingActivities(params, function(err, data) {\n    if (err)  { \n      console.log(err);\n    } else {\n      console.log(data.Activities);\n\n      $(\"#ASGStatusSpinner\").hide();\n      var d = new Date();\n      $(\"#ASGStatus\").parent().show();\n      $(\"#ASGStatus\").empty();\n      $.each(data.Activities, function(index, obj){\n        row = $(\"<tr>\");\n        d.setTime(Date.parse((typeof obj.EndTime != 'undefined')?obj.EndTime:obj.StartTime));\n        row.append(\"<td>\"+d.getDate()+\"/\"+d.getMonth()+\"/\"+d.getFullYear()+\" \"+(\"0\"+d.getHours()).slice(-2) +\":\"+ (\"0\"+d.getMinutes()).slice(-2)+\":\"+(\"0\"+d.getSeconds()).slice(-2)+\"</td>\");\n        row.append(\"<td>\"+obj.Description+\"</td>\");\n      $(\"#ASGStatus\").append(row);\n      })\n\n    }\n  });\n  window.setTimeout(function(){ console.log(\"Updating ASG activity\"); $(\"#ASGStatusSpinner\").show(); updateASGStatus(); }, 3000);\n};\nwindow.setTimeout(function(){ console.log(\"Updating ASG activity\"); $(\"#ASGStatusSpinner\").show(); updateASGStatus(); }, 1);\n\n$('#btnswarmup').click(function(){\n  $('#dlgswarmup').modal('show');\n});\n\n$('#btnupdateswarm').click(function(){\n  swarmUp($('#swarmsize').val(), function(){$('#dlgswarmup').modal('hide');});\n});\n\n$('#btnswarmdown').click(function(){\n  swarmDown();\n});\n\n$('#btnswarmdown').click(function(){\n  swarmDown();\n});\n\n$('#btnswarmattack').click(function(){\n  $('#dlgattack').modal('show');\n});\n\n$('#btnattack').click(function(){\n  swarmAttack( \n    $('#destinationURL').val(), \n    $('#testName').val(), \n    $('#totalRequests').val(), \n    $('#concurrentRequests').val(), \n    function(){$('#dlgattack').modal('hide');},\n    function(err_msg){$('#alert-modal-body').html(err_msg);}\n  );\n});\n\nfunction updateInstanceStatus(){\n  var params = {\n    AutoScalingGroupNames: [asgname]\n  }\n  autoscaling.describeAutoScalingGroups(params, function(err, data) {\n    if (err)  { \n      console.log(err);\n    } else {\n      console.log(data);\n      $(\"#ASGInstancesSpinner\").hide();\n      var d = new Date();\n      $(\"#ASGInstances\").parent().show();\n      $(\"#ASGInstances\").empty();\n      $.each(data.AutoScalingGroups[0].Instances, function(index, obj){\n        row = $(\"<tr>\");\n        d.setTime(Date.parse(obj.EndTime));\n        row.append(\"<td>\"+obj.InstanceId+\"</td>\");\n        row.append(\"<td>\"+obj.AvailabilityZone+\"</td>\");\n        row.append(\"<td>\"+obj.LifecycleState+\"</td>\");\n        $(\"#ASGInstances\").append(row);\n      })\n\n\n    }\n  });\n  window.setTimeout(function(){ console.log(\"Updating Instance List\"); $(\"#ASGInstancesSpinner\").show();updateInstanceStatus(); }, 3000);\n};\nwindow.setTimeout(function(){  console.log(\"Updating Instance List\"); $(\"#ASGInstancesSpinner\").show();updateInstanceStatus(); }, 1);\n\nvar max_total=100000;\nvar max_concurrent=100000;\nfunction swarmAttack(url, testname, total, concurrent, cb, err_cb){\n  var r = new RegExp(\"^http(s?)\\:\\/\\/[0-9a-zA-Z]([-.\\w]*[0-9a-zA-Z])*(:(0-9)*)*(\\/?)([a-zA-Z0-9\\-\\.\\?\\,\\'\\/\\\\\\+&amp;%\\$#_]*)?$\"); \n  if(!r.test(url)){ err_cb(\"Invalid URL\"); return;}\n  if(!testname){ err_cb(\"Invalid test name\"); return;}\n  if(!(total >= 1 && total<= max_total)){ err_cb(\"Total requests must be between 1 and \"+max_total); return;}\n  if(!(concurrent >= 1 && concurrent<= 100000)){ err_cb(\"Concurrent requests must be between 1 and \"+max_concurrent); return;}\n//  if(total < concurrent){ err_cb(\"Total requests must be greater that concurrent requests\"); return;}\n\n  var payload = {url:url,testname:testname,total:total,concurrent:concurrent};\n  var lambda = new AWS.Lambda({region:'ap-southeast-2'});\n  var params = {\n    FunctionName: '",
+              {
+                "Ref": "BeesLaunch"
+              },
+              "',\n    LogType: 'None',\n    Payload: JSON.stringify(payload)\n  };\n  console.log(params);\n  lambda.invoke(params, function(err, data) {\n    if (err) { console.log(err, err.stack); return; } \n    cb();\n    console.log(data);\n  });\n}\n\nfunction swarmDown(){\n  var lambda = new AWS.Lambda({region:'ap-southeast-2'});\n  var params = {\n    FunctionName: '",
+              {
+                "Ref": "BeesDown"
+              },
+              "',\n    LogType: 'None' \n  };\n  console.log(params);\n  lambda.invoke(params, function(err, data) {\n    if (err) { console.log(err, err.stack); return; } \n    console.log(data);\n  });\n}\n\nfunction swarmUp(size, callback){\n  if (!(size >= 1 && size<= 20)) { alert('Error! must be a number between 1 and 20'); return; }\n  console.log(size);\n  var lambda = new AWS.Lambda({region:'ap-southeast-2'});\n  var params = {\n    FunctionName: '",
+              {
+                "Ref": "BeesUp"
+              },
+              "',\n    LogType: 'None' ,\n    Payload: size\n  };\n  console.log(params);\n  lambda.invoke(params, function(err, data) {\n    if (err) { console.log(err, err.stack); return; } \n    console.log(data);\n    callback(data);\n  });\n}\n</script>\n</html>\n"
+            ]
+          ]
+        },
+        "Key": "index.html"
+      }
+    },
+    "JSDateLib": {
+      "Type": "Custom::InitialStatusPage",
+      "Properties": {
+        "ServiceToken": {
+          "Fn::GetAtt": [
+            "CreateS3FileFromHTTPS",
+            "Arn"
+          ]
+        },
+        "StackName": {
+          "Ref": "AWS::StackName"
+        },
+        "Region": {
+          "Ref": "AWS::Region"
+        },
+        "Host": "raw.githubusercontent.com",
+        "Port": "443",
+        "Path": "datejs/Datejs/master/build/date-en-AU.js",
+        "Bucket": {
+          "Ref": "StatusS3Bucket"
+        },
+        "ContentType": "text/javascript",
+        "Key": "date-en-AU.js"
+      }
+    },
+    "AllowBeesUp": {
+      "Properties": {
+        "FunctionName": {
+          "Fn::GetAtt": [
+            "BeesUp",
+            "Arn"
+          ]
+        },
+        "Principal": "*",
+        "Action": "lambda:InvokeFunction"
+      },
+      "Type": "AWS::Lambda::Permission"
+    },
+    "BeesUp": {
+      "DependsOn": [
+        "LambdaExecutionRole"
+      ],
+      "Properties": {
+        "Description": "Scale up a swarm",
+        "Handler": "index.handler",
+        "Runtime": "nodejs4.3",
+        "Timeout": "30",
+        "Role": {
+          "Fn::GetAtt": [
+            "LambdaExecutionRole",
+            "Arn"
+          ]
+        },
+        "Code": {
+          "ZipFile": {
+            "Fn::Join": [
+              "",
+              [
+                "var aws=require('aws-sdk');\nvar autoscaling=new aws.AutoScaling();\naws.config.region='",
+                {
+                  "Ref": "AWS::Region"
+                },
+                "';\nexports.handler=function(event,context,cb) {\n  console.log(JSON.stringify(event));\n  if (!(event > 0 && event < 20)){\n    console.log('Must be an integer between 1 and 20!');\n    return;\n  }\n  asgsize=event;\n  var params = {\n    AutoScalingGroupName: '",
+                {
+                  "Ref": "AutoScalingGroup"
+                },
+                "',\n    DesiredCapacity: asgsize,\n    MaxSize: asgsize,\n    MinSize: asgsize,\n  };\n  autoscaling.updateAutoScalingGroup(params, function(err, data) {\n    if (err) console.log(err, err.stack);\n    else console.log(data);\n  });\n};\n"
+              ]
+            ]
+          }
+        }
+      },
+      "Type": "AWS::Lambda::Function"
+    },
+    "BeesDown": {
+      "DependsOn": [
+        "LambdaExecutionRole"
+      ],
+      "Properties": {
+        "Description": "Scale down a swarm",
+        "Handler": "index.handler",
+        "Runtime": "nodejs4.3",
+        "Timeout": "30",
+        "Role": {
+          "Fn::GetAtt": [
+            "LambdaExecutionRole",
+            "Arn"
+          ]
+        },
+        "Code": {
+          "ZipFile": {
+            "Fn::Join": [
+              "",
+              [
+                "var aws=require('aws-sdk');\nvar autoscaling=new aws.AutoScaling();\naws.config.region='",
+                {
+                  "Ref": "AWS::Region"
+                },
+                "';\nexports.handler=function(event,context,cb) {\n  console.log(JSON.stringify(event));\n  var params = {\n    AutoScalingGroupName: '",
+                {
+                  "Ref": "AutoScalingGroup"
+                },
+                "',\n    DesiredCapacity: 0,\n    MaxSize: 0,\n    MinSize: 0,\n  };\n  autoscaling.updateAutoScalingGroup(params, function(err, data) {\n    if (err) console.log(err, err.stack);\n    else console.log(data);\n  });\n};\n"
+              ]
+            ]
+          }
+        }
+      },
+      "Type": "AWS::Lambda::Function"
+    },
+    "AllowBeesDown": {
+      "Properties": {
+        "FunctionName": {
+          "Fn::GetAtt": [
+            "BeesDown",
+            "Arn"
+          ]
+        },
+        "Principal": "*",
+        "Action": "lambda:InvokeFunction"
+      },
+      "Type": "AWS::Lambda::Permission"
+    },
+    "BeesLaunch": {
+      "DependsOn": [
+        "LambdaExecutionRole"
+      ],
+      "Properties": {
+        "Description": "Attttaaaaaaaaaaaaaccckk!",
+        "Handler": "index.handler",
+        "Runtime": "nodejs4.3",
+        "Timeout": "30",
+        "Role": {
+          "Fn::GetAtt": [
+            "LambdaExecutionRole",
+            "Arn"
+          ]
+        },
+        "Code": {
+          "ZipFile": {
+            "Fn::Join": [
+              "",
+              [
+                "var aws=require('aws-sdk');\nvar autoscaling=new aws.AutoScaling();\nvar ssm = new aws.SSM();\naws.config.region='",
+                {
+                  "Ref": "AWS::Region"
+                },
+                "';\n\nexports.handler=function(event,context,cb) {\n  console.log(JSON.stringify(event));\n  autoscaling.describeAutoScalingGroups({AutoScalingGroupNames:['",
+                {
+                  "Ref": "AutoScalingGroup"
+                },
+                "']},function(err, data) {\n    if(!event.testname){console.log(\"Invalid test name:\"+event.testname);return;}\n    var instances = data.AutoScalingGroups[0].Instances.map(function(obj){return obj.InstanceId;});\n    if(instances.length<1){console.log(instances.length+ \" instances in ASG. Exiting\");return;}\n    var per_i_requests = Math.ceil(event.total / instances.length);\n    if(per_i_requests<1){console.log(\"Invalid requests:\"+per_i_requests);return;}\n    var per_i_concurrency = Math.ceil(event.concurrent / instances.length);\n    if(per_i_concurrency<1){console.log(\"Invalid requests:\"+per_i_concurrency);return;}\n    console.log(JSON.stringify(instances));\n    var params = {\n      DocumentName: '",
+                {
+                  "Ref": "SSMDocument"
+                },
+                "',\n      InstanceIds: instances,\n      Parameters: {\n        target: [event.url],\n        requests:[JSON.stringify(per_i_requests)],\n        concurrency: [JSON.stringify(per_i_concurrency)]\n      },\n      ServiceRoleArn: '",
+                {
+                  "Fn::GetAtt": [
+                    "SSMExecutionRole",
+                    "Arn"
+                  ]
+                },
+                "',\n      TimeoutSeconds: 180,\n      NotificationConfig: {\n        NotificationArn: '",
+                {
+                  "Ref": "StatusSNSTopic"
+                },
+                "',\n        NotificationEvents: ['All'],\n        NotificationType: 'Command'\n      },\n      OutputS3BucketName: '",
+                {
+                  "Ref": "StatusS3Bucket"
+                },
+                "',\n      OutputS3KeyPrefix: \"logs/\"+event.testname+\"/\"\n    };\n    ssm.sendCommand(params, function(err, data) {\n       if (err) {console.log(err, err.stack); return;}\n       console.log(data);\n    });\n    if (err) {console.log(err, err.stack); return;}\n  });\n};\n"
+              ]
+            ]
+          }
+        }
+      },
+      "Type": "AWS::Lambda::Function"
+    },
+    "StatusS3Bucket": {
+      "DeletionPolicy": "Retain",
+      "Properties": {
+        "AccessControl": "BucketOwnerFullControl",
+        "VersioningConfiguration": {
+          "Status": "Enabled"
+        },
+        "BucketName": {
+          "Ref": "StatusS3BucketName"
+        },
+        "WebsiteConfiguration": {
+          "IndexDocument": "index.html"
+        }
+      },
+      "Type": "AWS::S3::Bucket"
+    },
+    "StatusS3BucketPolicy": {
+      "Properties": {
+        "Bucket": {
+          "Ref": "StatusS3BucketName"
+        },
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": [
+                "s3:GetObject"
+              ],
+              "Effect": "Allow",
+              "Principal": "*",
+              "Sid": "ReadStatusPage",
+              "Resource": {
+                "Fn::Join": [
+                  "",
+                  [
+                    "arn:aws:s3:::",
+                    {
+                      "Ref": "StatusS3BucketName"
+                    },
+                    "/*"
+                  ]
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "Type": "AWS::S3::BucketPolicy"
+    },
+    "AutoScalingGroup": {
+      "DependsOn": [
+        "LaunchConfig",
+        "StatusSNSTopic"
+      ],
+      "Properties": {
+        "NotificationConfigurations": [
+          {
+            "NotificationTypes": [
+              "autoscaling:EC2_INSTANCE_LAUNCH",
+              "autoscaling:EC2_INSTANCE_LAUNCH_ERROR",
+              "autoscaling:EC2_INSTANCE_TERMINATE",
+              "autoscaling:EC2_INSTANCE_TERMINATE_ERROR",
+              "autoscaling:TEST_NOTIFICATION"
+            ],
+            "TopicARN": {
+              "Ref": "StatusSNSTopic"
+            }
+          }
+        ],
+        "Cooldown": 60,
+        "HealthCheckGracePeriod": 60,
+        "LaunchConfigurationName": {
+          "Ref": "LaunchConfig"
+        },
+        "MinSize": 0,
+        "DesiredCapacity": 0,
+        "MaxSize": 0,
+        "VPCZoneIdentifier": {
+          "Ref": "InstanceSubnets"
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "PropagateAtLaunch": true,
+            "Value": "Drones"
+          }
+        ]
+      },
+      "Type": "AWS::AutoScaling::AutoScalingGroup"
+    },
+    "LaunchConfig": {
+      "DependsOn": [
+        "InstanceProfile",
+        "InstanceSecurityGroup"
+      ],
+      "Properties": {
+        "ImageId": {
+          "Ref": "InstanceAMI"
+        },
+        "IamInstanceProfile": {
+          "Ref": "InstanceProfile"
+        },
+        "SecurityGroups": [
+          {
+            "Ref": "InstanceSecurityGroup"
+          }
+        ],
+        "InstanceType": {
+          "Ref": "InstanceType"
+        },
+        "KeyName": "bees"
+      },
+      "Type": "AWS::AutoScaling::LaunchConfiguration"
+    },
+    "SSMDocument": {
+      "Type": "AWS::SSM::Document",
+      "Properties": {
+        "Content": {
+          "Fn::Join": [
+            "",
+            [
+              "{\n    \"schemaVersion\":\"1.2\",\n    \"description\":\"Execute ApacheBench\",\n    \"parameters\":{\n        \"target\":{\n            \"type\":\"String\",\n            \"description\":\"(Required) Target URL\"\n        },\n        \"requests\":{\n            \"type\":\"String\",\n            \"description\":\"Total number of requests\",\n            \"allowedPattern\":\"([1-9][0-9]{0,3}|10000)\"\n        },\n        \"concurrency\":{\n            \"type\":\"String\",\n            \"description\":\"Number of concurrent requests\",\n            \"allowedPattern\":\"([1-9][0-9]{0,3}|10000)\"\n        },\n        \"executionTimeout\":{\n            \"type\":\"String\",\n            \"default\":\"3600\",\n            \"description\":\"(Optional) The time in seconds for a command to complete before it is considered to have failed. Default is 3600 (1 hour). Maximum is 28800 (8 hours).\",\n            \"allowedPattern\":\"([1-9][0-9]{0,3})|(1[0-9]{1,4})|(2[0-7][0-9]{1,3})|(28[0-7][0-9]{1,2})|(28800)\"\n        }\n    },\n    \"runtimeConfig\":{\n        \"aws:runShellScript\":{\n            \"properties\":[\n                {\n                    \"id\":\"0.aws:runShellScript\",\n                    \"runCommand\":[\n                        \"#!/bin/sh\",\n                        \"echo CMD: /usr/bin/ab -r -v 3 -n {{ requests }} -c {{ concurrency }} {{ target }}\",\n                        \"/usr/bin/ab -r -v 3 -n {{ requests }} -c {{ concurrency }} {{ target }}\"\n                    ],\n                    \"workingDirectory\":\"/tmp\",\n                    \"timeoutSeconds\":\"{{ executionTimeout }}\"\n                }\n            ]\n        }\n    }\n}"
+            ]
+          ]
+        }
+      }
+    },
+    "SnsMessageEvent": {
+      "DependsOn": [
+        "LambdaExecutionRole"
+      ],
+      "Properties": {
+        "Description": "Function to pull SNS message",
+        "Handler": "index.handler",
+        "Runtime": "nodejs4.3",
+        "Timeout": "30",
+        "Role": {
+          "Fn::GetAtt": [
+            "LambdaExecutionRole",
+            "Arn"
+          ]
+        },
+        "Code": {
+          "ZipFile": {
+            "Fn::Join": [
+              "",
+              [
+                "'use strict';\nexports.handler = (event, context, callback) => {\n    var message = JSON.parse(event.Records[0].Sns.Message);\n    var subject = event.Records[0].Sns.Subject;\n    console.log('From SNS:', message);\n    var SnsPublishTime = event.Records[0].Sns.Timestamp;\n    var aws = require('aws-sdk');\n    var ddb = new aws.DynamoDB({params: {TableName: '",
+                {
+                  "Ref": "StatusTable"
+                },
+                "'}});\n    var accountName = message.AccountName;\n    var timeStamp = SnsPublishTime;\n    var processName = message.ProcessName;\n    var moStatus = message.Status;\n    if (subject !== null && subject.indexOf('Auto Scaling:') >= 0) {\n        processName = 'Autoscaling-Group';\n        moStatus = message.Description;\n        accountName= message.AutoScalingGroupName;\n        accountName = accountName.replace(\"",
+                {
+                  "Ref": "AWS::StackName"
+                },
+                "-\",\"\");\n    }\n    var itemParams = {Item: {accountName: {S: accountName},timeStamp: {S: timeStamp}, processName: {S: processName},moStatus: {S: moStatus}  }};\n    console.log(itemParams);\n    ddb.putItem(itemParams, function() {\n        context.done(null,'');\n     });\n    callback(null, message);\n};"
+              ]
+            ]
+          }
+        }
+      },
+      "Type": "AWS::Lambda::Function"
+    },
+    "AllowSnsMessageEvent": {
+      "Properties": {
+        "FunctionName": {
+          "Fn::GetAtt": [
+            "SnsMessageEvent",
+            "Arn"
+          ]
+        },
+        "Principal": "sns.amazonaws.com",
+        "Action": "lambda:InvokeFunction",
+        "SourceArn": {
+          "Ref": "StatusSNSTopic"
+        }
+      },
+      "Type": "AWS::Lambda::Permission",
+      "DependsOn": [
+        "SnsMessageEvent",
+        "StatusSNSTopic"
+      ]
+    },
+    "UpdateStatusPage": {
+      "DependsOn": [
+        "LambdaExecutionRole"
+      ],
+      "Properties": {
+        "Description": "Function to update status page with data from Dynamo DB",
+        "Handler": "index.handler",
+        "Runtime": "nodejs4.3",
+        "Timeout": "30",
+        "Role": {
+          "Fn::GetAtt": [
+            "LambdaExecutionRole",
+            "Arn"
+          ]
+        },
+        "Code": {
+          "ZipFile": {
+            "Fn::Join": [
+              "",
+              [
+                "'use strict';\nconsole.log('Loading function');\nlet AWS = require('aws-sdk'); \nAWS.config.region = '",
+                {
+                  "Ref": "AWS::Region"
+                },
+                "';\nexports.handler = (event, context, callback) => {\n//console.log('Received event:', JSON.stringify(event, null, 2));\n event.Records.forEach((record) => {\n  console.log(record.eventID);\n  console.log(record.eventName);\n  console.log('DynamoDB Record: %j', record.dynamodb);\n });      \n var dynamodb = new AWS.DynamoDB({apiVersion: '2012-08-10'});\n var dbparams = {\n  TableName:'",
+                {
+                  "Ref": "StatusTable"
+                },
+                "'\n }\n dynamodb.scan(dbparams, function(err, data) {            \n  if (err) console.log(err, err.stack); // an error occurred \n  else {\n   console.log(data);\n   var htmlData = '<html><table id=\"table\"><thead><style>table, th, td {border: 1px solid black;border-collapse: collapse;} th, td {padding: 5px;text-align: left;}</style>';\n   htmlData = htmlData + '<tr><th style=\\'width: 200px;\\'>Account Name</th><th style=\\'width: 200px;\\'>Date</th><th style=\\'width: 200px;\\' >Process Name</th><th style=\\'width: 300px;\\'>Status</th></tr></thead><tbody>';\n   htmlData = htmlData + '<script src=\"https://code.jquery.com/jquery-2.1.0.js\"></script>'\n   htmlData = htmlData + '<input type=\"text\" id=\"search\" placeholder=\"Type to search\">'\n   for (var i =0; i < data.Items.length; i++) {\n        var backgroundcolor = \"\";\n        if (data.Items[i].moStatus.S.indexOf('Failed') > -1) {\n            backgroundcolor =\"red\";\n        }\n        \n        htmlData = htmlData + '<tr style=\\'background-color: ' + backgroundcolor + ';\\'><td>' + data.Items[i].accountName.S + '</td>'+'<td>' + data.Items[i].timeStamp.S + '</td>'+'<td>' + data.Items[i].processName.S + '</td>'+'<td>' + data.Items[i].moStatus.S + '</td></tr>';\n   }\n   htmlData = htmlData + '<script type=\"text/javascript\">'\n   htmlData = htmlData + '     var $rows = $(\\'#table tr\\').not(\\'thead tr\\');'\n   htmlData = htmlData + '     $(\\'#search\\').keyup(function() {'\n   htmlData = htmlData + '         var val = $.trim($(this).val()).replace(/ +/g, \\' \\').toLowerCase();'\n   htmlData = htmlData + '        $rows.show().filter(function() {'\n   htmlData = htmlData + '         var text = $(this).text().replace(/\\s+/g, \\' \\').toLowerCase();'\n   htmlData = htmlData + '       return !~text.indexOf(val);'\n   htmlData = htmlData + '         }).hide();'\n   htmlData = htmlData + '     });'\n   htmlData = htmlData + '    </script>'\n   htmlData = htmlData + '</tbody></table>';\n   htmlData = htmlData + '<p>Last Updated at ' + new Date();\n    var s3 = new AWS.S3();\n    var s3params = {Bucket: '",
+                {
+                  "Ref": "StatusS3BucketName"
+                },
+                "', Key: 'status.html', Body: htmlData, ContentType: 'text/html'}\n    s3.putObject(s3params, function(err, data) {\n     if (err) console.log(err, err.stack); // an error occurred\n     else     console.log(data);           // successful response\n    });\n }\n }); \ncallback(null, 'done');\n};"
+              ]
+            ]
+          }
+        }
+      },
+      "Type": "AWS::Lambda::Function"
+    },
+    "UpdateStatusEventSourceMapping": {
+      "DependsOn": "UpdateStatusPage",
+      "Properties": {
+        "BatchSize": 100,
+        "Enabled": true,
+        "EventSourceArn": {
+          "Fn::GetAtt": [
+            "StatusTable",
+            "StreamArn"
+          ]
+        },
+        "FunctionName": {
+          "Fn::GetAtt": [
+            "UpdateStatusPage",
+            "Arn"
+          ]
+        },
+        "StartingPosition": "LATEST"
+      },
+      "Type": "AWS::Lambda::EventSourceMapping"
+    },
+    "SSMExecutionRole": {
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": [
+                  "ec2.amazonaws.com",
+                  "ssm.amazonaws.com"
+                ]
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "Path": "/",
+        "ManagedPolicyArns": [
+          "arn:aws:iam::aws:policy/AmazonSNSFullAccess"
+        ],
+        "Policies": [
+          {
+            "PolicyName": "SSMExecution",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Action": [
+                    "s3:PutObject"
+                  ],
+                  "Effect": "Allow",
+                  "Sid": "PutLogs",
+                  "Resource": {
+                    "Fn::Join": [
+                      "",
+                      [
+                        "arn:aws:s3:::",
+                        {
+                          "Ref": "StatusS3BucketName"
+                        },
+                        "logs/*"
+                      ]
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "Type": "AWS::IAM::Role"
+    },
+    "LambdaExecutionRole": {
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": [
+                "sts:AssumeRole"
+              ],
+              "Effect": "Allow",
+              "Principal": {
+                "Service": [
+                  "lambda.amazonaws.com"
+                ]
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "Path": "/",
+        "Policies": [
+          {
+            "PolicyName": "CWLoggingPolicy",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "AllowDataEntry",
+                  "Effect": "Allow",
+                  "Action": [
+                    "logs:CreateLogGroup",
+                    "logs:CreateLogStream",
+                    "logs:PutLogEvents",
+                    "logs:DescribeLog*"
+                  ],
+                  "Resource": [
+                    "arn:aws:logs:*:*:*"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "PolicyDocument": {
+              "Statement": [
+                {
+                  "Action": [
+                    "cloudformation:*",
+                    "lambda:*",
+                    "autoscaling:*",
+                    "s3:*",
+                    "dynamodb:*",
+                    "iam:PassRole",
+                    "sns:*",
+                    "ec2:*",
+                    "ssm:*"
+                  ],
+                  "Effect": "Allow",
+                  "Resource": "*"
+                }
+              ],
+              "Version": "2012-10-17"
+            },
+            "PolicyName": "LambdaExecution"
+          }
+        ]
+      },
+      "Type": "AWS::IAM::Role"
+    },
+    "StatusTable": {
+      "Properties": {
+        "StreamSpecification": {
+          "StreamViewType": "KEYS_ONLY"
+        },
+        "AttributeDefinitions": [
+          {
+            "AttributeName": "runName",
+            "AttributeType": "S"
+          },
+          {
+            "AttributeName": "timeStamp",
+            "AttributeType": "S"
+          },
+          {
+            "AttributeName": "ssmCommandId",
+            "AttributeType": "S"
+          },
+          {
+            "AttributeName": "targetUrl",
+            "AttributeType": "S"
+          },
+          {
+            "AttributeName": "totalRequests",
+            "AttributeType": "N"
+          },
+          {
+            "AttributeName": "concurrency",
+            "AttributeType": "N"
+          },
+          {
+            "AttributeName": "completeRequests",
+            "AttributeType": "N"
+          },
+          {
+            "AttributeName": "failedRequests",
+            "AttributeType": "N"
+          },
+          {
+            "AttributeName": "totalTransferredBytes",
+            "AttributeType": "N"
+          },
+          {
+            "AttributeName": "timePerRequest",
+            "AttributeType": "N"
+          },
+          {
+            "AttributeName": "timePerRequestConcurrent",
+            "AttributeType": "N"
+          }
+        ],
+        "KeySchema": [
+          {
+            "AttributeName": "runName",
+            "KeyType": "HASH"
+          },
+          {
+            "AttributeName": "timeStamp",
+            "KeyType": "RANGE"
+          }
+        ],
+        "ProvisionedThroughput": {
+          "ReadCapacityUnits": 10,
+          "WriteCapacityUnits": 10
+        }
+      },
+      "Type": "AWS::DynamoDB::Table"
+    },
+    "StatusSNSTopic": {
+      "DependsOn": "SnsMessageEvent",
+      "Properties": {
+        "Subscription": [
+          {
+            "Endpoint": {
+              "Fn::GetAtt": [
+                "SnsMessageEvent",
+                "Arn"
+              ]
+            },
+            "Protocol": "lambda"
+          }
+        ]
+      },
+      "Type": "AWS::SNS::Topic"
+    }
+  },
+  "Outputs": {
+    "StatusPageURL": {
+      "Description": "Status Page URL",
+      "Value": {
+        "Fn::Join": [
+          "",
+          [
+            "https://s3-",
+            {
+              "Ref": "AWS::Region"
+            },
+            ".amazonaws.com/",
+            {
+              "Ref": "StatusS3BucketName"
+            },
+            "/index.html"
+          ]
+        ]
+      }
+    }
+  }
+}

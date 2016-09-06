@@ -1,0 +1,20 @@
+{
+  "Version": "2012-10-17",
+  "Id": "arn:aws:sqs:ap-southeast-2:932911914880:BeeSSMInvocations/SQSDefaultPolicy",
+  "Statement": [
+    {
+      "Sid": "Sid1471578509018",
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "*"
+      },
+      "Action": "SQS:SendMessage",
+      "Resource": "arn:aws:sqs:ap-southeast-2:932911914880:BeeSSMInvocations",
+      "Condition": {
+        "ArnLike": {
+          "aws:SourceArn": "arn:aws:sns:*:932911914880:BeeSSMInvocations"
+        }
+      }
+    }
+  ]
+}
