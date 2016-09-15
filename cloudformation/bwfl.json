@@ -491,7 +491,11 @@
             "Fn::Join": [
               "",
               [
-                "var aws=require('aws-sdk');\nvar autoscaling=new aws.AutoScaling();\nvar ssm = new aws.SSM();\naws.config.region='",
+                "var aws=require('aws-sdk');\nvar autoscaling=new aws.AutoScaling();\nvar ddb = new aws.DynamoDB({params: {TableName: '",
+                {
+                  "Ref": "StatusTable"
+                },
+                "'}});\nvar ssm = new aws.SSM();\naws.config.region='",
                 {
                   "Ref": "AWS::Region"
                 },
@@ -518,7 +522,7 @@
                 {
                   "Ref": "StatusS3Bucket"
                 },
-                "',\n      OutputS3KeyPrefix: \"logs/\"+event.testname+\"/\"\n    };\n    ssm.sendCommand(params, function(err, data) {\n       if (err) {console.log(err, err.stack); return;}\n       console.log(data);\n    });\n    if (err) {console.log(err, err.stack); return;}\n  });\n};\n"
+                "',\n      OutputS3KeyPrefix: \"logs/\"+event.testname+\"/\"\n    };\n    ssm.sendCommand(params, function(err, data) {\n      if (err) {console.log(err, err.stack); return;}\n      var itemParams = {Item:{\n        accountName: {S: JSON.stringify(event.testname)},\n        timeStamp: {S: JSON.stringify(Math.floor(Date.now()/1000))},\n        targetUrl: {S: JSON.stringify(event.url)},\n        totalRequests: {N: JSON.stringify(event.total)},\n        concurrency: {N: JSON.stringify(event.concurrent)}\n      }};\n      console.log(itemParams);\n      ddb.putItem(itemParams, function(err, data) {\n        if (err) {console.log(err, err.stack); return;}\n        console.log(data);\n      });\n      //console.log(data);\n    });\n    if (err) {console.log(err, err.stack); return;}\n  });\n};\n"
               ]
             ]
           }
