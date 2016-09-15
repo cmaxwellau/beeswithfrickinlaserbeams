@@ -241,6 +241,7 @@ CloudFormation do
       :region => Ref("AWS::Region"),
       :asg => Ref("AutoScalingGroup"),
       :ssmdoc => Ref("SSMDocument"),
+      :tableName => Ref("StatusTable"),
       :ssmrole => FnGetAtt("SSMExecutionRole", "Arn"),
       :outputbucket => Ref("StatusS3Bucket"),
       :notiftopic => Ref("StatusSNSTopic") 
@@ -325,10 +326,9 @@ CloudFormation do
     Property("Timeout", "30")
     Property("Role", FnGetAtt("LambdaExecutionRole", "Arn"))
     Property("Code", { "ZipFile" => FnFormat( 
-      File.read("#{$lambda_dir}/mo_process_sns.js") ,
+      File.read("#{$lambda_dir}/process_sns.js") ,
       :stackname => Ref("AWS::StackName"), 
       :region => Ref("AWS::Region"), 
-      :bucket => Ref("TransferS3BucketName"), 
       :tableName => Ref("StatusTable"),
       :snsTopic => Ref("StatusSNSTopic") 
       ) 
@@ -352,7 +352,7 @@ CloudFormation do
     Property("Timeout", "30")
     Property("Role", FnGetAtt("LambdaExecutionRole", "Arn"))
     Property("Code", { "ZipFile" => FnFormat( 
-      File.read("#{$lambda_dir}/mo_process_status.js") ,
+      File.read("#{$lambda_dir}/process_status.js") ,
       :stackname => Ref("AWS::StackName"), 
       :region => Ref("AWS::Region"), 
       :bucket => Ref("StatusS3BucketName"), 
